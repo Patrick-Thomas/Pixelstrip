@@ -4,7 +4,6 @@ cfg.pwd="12345678"
 wifi.ap.config(cfg)
 wifi.setmode(wifi.SOFTAP)
 
-timer_period = 30
 strip_offset = 10
 
 red = 0
@@ -15,10 +14,11 @@ green2 = 0
 blue2 = 0
 density = 0
 quantity = 1
+brightness = 0
 speed = 1
+new_speed = 1
 
-i = 0
-increment = 0
+mybool = true
 
 ws2812.init();
 
@@ -28,19 +28,12 @@ new_buffer = ws2812.newBuffer(300, 3);
 new_buffer:fill(0, 0, 0);
 local max = math.max; 
 local min = math.min;
+local floor = math.floor;
 
-tmr.register(0, timer_period, tmr.ALARM_AUTO, function()
+tmr.register(0, 30, tmr.ALARM_AUTO, function()
 
-    i = i + increment
-
-    if i == 12 then
-        
-        buffer:shift(1, ws2812.SHIFT_CIRCULAR)
-        ws2812.write(buffer)
-
-    end
-
-    i = i%12
+    buffer:shift(1, ws2812.SHIFT_CIRCULAR)
+    ws2812.write(buffer)
    
 end)
 
@@ -59,6 +52,9 @@ function update ()
     -- At full density, we want to colorise 
     -- 'centre' amount of pixels
     active_pixels = density*centre/128
+
+    -- Diminish pixels using brightness parameter
+    alpha = brightness/8
 
     -- At centre point, we want to be displaying
     -- the primary RGB colour
@@ -89,7 +85,7 @@ function update ()
 
         end
 
-        -- Smooth
+        -- Smooth transitions
         for k = 0,centre do
 
             last_g, last_r, last_b = new_buffer:get(centre_pixel + k - 2)
@@ -107,6 +103,15 @@ function update ()
             new_buffer:set(centre_pixel - k + 1, last_g, last_r, last_b)
 
         end
+
+    end
+
+    -- Do for each pixel
+    for j = 1,300 do
+
+        g, r, b = new_buffer:get(j)
+        new_buffer:set(j, g*alpha, r*alpha, b*alpha)
+
     end
 
     end
@@ -118,6 +123,27 @@ function update ()
     --for j = 1,300 do
     --    print(new_buffer:get(j))
     --end
+
+    -- Speed update
+    if new_speed ~= speed then
+
+        speed = new_speed
+
+        -- stop the timer and write the pixels once
+        if new_speed == 0 then
+
+            tmr.stop(0)
+            ws2812.write(new_buffer)
+
+        -- change the timer and restart if necessary
+        else
+
+            tmr.interval(0, 160 - speed)
+            tmr.start(0)
+            
+        end
+            
+    end
 
     buffer = new_buffer
 
@@ -141,12 +167,11 @@ srv:on("receive", function(srv, msg)
     green2 = string.byte(msg, 5)
     blue2 = string.byte(msg, 6)
     density = string.byte(msg, 7)
-    quantity = string.byte(msg, 8) + 1
-    speed = string.byte(msg, 9) + 1
-    
+    quantity = floor(string.byte(msg, 8)/16) + 1
+    brightness = string.byte(msg, 9)
+    new_speed = string.byte(msg, 10)
+
     update()
 
-    increments_table = {0,1,2,3,4,6,12}
-    increment = increments_table[speed]
-
 end)
+
